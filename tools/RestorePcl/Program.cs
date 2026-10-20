@@ -170,7 +170,9 @@ internal static class Program
         row.Add(I(OpCodes.Ldloc,rows.Body.Variables[7]));
         row.Add(I(OpCodes.Ldarg_0)); row.Add(I(OpCodes.Ldfld,Field("PCL.PageDownloadResourceDetail","TargetResourceType")));
         row.Add(I(OpCodes.Ldc_I4_2)); row.Add(I(OpCodes.Bne_Un,saveOnly));
-        row.Add(I(OpCodes.Ldarg_0)); row.Add(I(OpCodes.Ldftn,Method(0x0600068e)));
+        // VB generated this adapter for the delegate's object sender. The
+        // underlying Install_Click requires MyListItem and cannot bind directly.
+        row.Add(I(OpCodes.Ldarg_0)); row.Add(I(OpCodes.Ldftn,Method(0x060006bb)));
         row.Add(I(OpCodes.Newobj,Ref("PCL.MyListItem/ClickEventHandler",".ctor",2)));
         row.Add(I(OpCodes.Ldarg_0)); row.Add(I(OpCodes.Ldftn,Method(0x0600068f)));
         row.Add(I(OpCodes.Newobj,Ref("PCL.MyIconButton/ClickEventHandler",".ctor",2)));
