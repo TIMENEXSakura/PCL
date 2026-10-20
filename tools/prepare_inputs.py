@@ -1,6 +1,7 @@
 """Use immutable public upstream inputs; never upload local user files."""
 from pathlib import Path
 import hashlib, io, json, urllib.parse, urllib.request, zipfile
+import dnfile
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "build-inputs"
 OUT.mkdir(exist_ok=True)
@@ -20,5 +21,20 @@ url = f"https://raw.githubusercontent.com/Meloong-Git/PCL/{DONOR_COMMIT}/" + url
 with urllib.request.urlopen(url, timeout=60) as response: donor_zip = response.read()
 inputs = [unpack((ROOT / "最新正式版.zip").read_bytes(), "original.exe", ORIGINAL_HASH),
           unpack(donor_zip, "donor-2.14.exe", DONOR_HASH)]
+# Cecil needs enum definitions from the original embedded dependencies when
+# serializing optional-parameter constants. Parse resources without executing them.
+pe = dnfile.dnPE(str(OUT / "original.exe"))
+for resource in pe.net.resources:
+    for entry in resource.data.entries:
+        data = entry.value
+        if not isinstance(data, bytes) or not data.startswith(b"MZ"):
+            continue
+        embedded = dnfile.dnPE(data=data)
+        if embedded.net is None:
+            continue
+        name = str(entry.name) + ".dll"
+        if Path(name).name != name:
+            raise RuntimeError("Unexpected embedded assembly resource name")
+        (OUT / name).write_bytes(data)
 (OUT / "inputs.json").write_text(json.dumps(inputs, indent=2), encoding="utf-8")
 print(json.dumps(inputs, indent=2))

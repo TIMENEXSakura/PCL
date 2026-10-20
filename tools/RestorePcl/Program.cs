@@ -10,7 +10,7 @@ internal static class Program
     const string OldHash = "5582952ded3b443503f66c23b810802bd20f1a3e847b54d9e09653a825859a36";
     static ModuleDefinition target = null!;
     static List<MethodDefinition> methods = null!;
-    static readonly List<object> changes = new();
+    static readonly List<(MethodDefinition Method, string Description, string OriginalToken)> changes = new();
     static readonly HashSet<MethodDefinition> changed = new();
     static readonly Dictionary<string, MemberReference> members = new();
     static IEnumerable<TypeDefinition> Types(TypeDefinition t) => new[] { t }.Concat(t.NestedTypes.SelectMany(Types));
@@ -29,7 +29,7 @@ internal static class Program
     static void Mark(MethodDefinition m, string description)
     {
         changed.Add(m);
-        changes.Add(new { token = $"0x{m.MetadataToken.ToUInt32():x8}", method = m.FullName, description });
+        changes.Add((m, description, $"0x{m.MetadataToken.ToUInt32():x8}"));
     }
     static void Nop(Instruction i) { i.OpCode = OpCodes.Nop; i.Operand = null; }
     static void InsertBefore(MethodDefinition m, Instruction anchor, IEnumerable<Instruction> ins)
@@ -265,6 +265,8 @@ internal static class Program
         var resolver=new DefaultAssemblyResolver();
         resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(args[1]))!);
         if (Environment.GetEnvironmentVariable("PCL_REFERENCE_DIRECTORY") is string referenceDirectory) resolver.AddSearchDirectory(referenceDirectory);
+        var framework = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Reference Assemblies", "Microsoft", "Framework", ".NETFramework", "v4.8");
+        if (Directory.Exists(framework)) { resolver.AddSearchDirectory(framework); resolver.AddSearchDirectory(Path.Combine(framework,"Facades")); }
         using var old=ModuleDefinition.ReadModule(args[0],new ReaderParameters { AssemblyResolver=resolver });
         target=ModuleDefinition.ReadModule(args[1],new ReaderParameters { AssemblyResolver=resolver });
         methods=target.Types.SelectMany(Types).SelectMany(t=>t.Methods).ToList();
@@ -282,7 +284,13 @@ internal static class Program
         foreach(var m in changed) { m.Body.SimplifyMacros(); m.Body.OptimizeMacros(); }
         ValidateStructure();
         target.Write(args[2],new WriterParameters { WriteSymbols=false });
-        var report=new { original=LatestHash, donor=OldHash, output=Hash(args[2]), originalVersion=target.Assembly.Name.Version.ToString(), changedMethods=changes, validation="Cecil structure validation passed; target program not executed" };
+        using var written = ModuleDefinition.ReadModule(args[2], new ReaderParameters { AssemblyResolver=resolver });
+        var writtenMethods = written.Types.SelectMany(Types).SelectMany(t=>t.Methods).ToDictionary(m=>m.FullName);
+        var recordedChanges = changes.Select(c => new {
+            token = $"0x{writtenMethods[c.Method.FullName].MetadataToken.ToUInt32():x8}",
+            originalToken = c.OriginalToken, method = c.Method.FullName, description = c.Description
+        }).ToList();
+        var report=new { original=LatestHash, donor=OldHash, output=Hash(args[2]), originalVersion=target.Assembly.Name.Version.ToString(), changedMethods=recordedChanges, validation="Cecil structure validation passed; target program not executed" };
         File.WriteAllText(args[2]+".patch.json",JsonSerializer.Serialize(report,new JsonSerializerOptions { WriteIndented=true }));
         Console.WriteLine(JsonSerializer.Serialize(report,new JsonSerializerOptions { WriteIndented=true }));
         target.Dispose(); return 0;
