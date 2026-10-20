@@ -15,7 +15,7 @@ Friend Module ModSecret
 
 #Region "网络鉴权"
 
-    Public Const RestrictMcDownload As Boolean = True
+    Public Const RestrictMcDownload As Boolean = False
     Friend Function SecretCdnSign(UrlWithMark As String) As String
         If Not UrlWithMark.EndsWithF("{CDN}") Then Return UrlWithMark
         Return UrlWithMark.Replace("{CDN}", "").Replace(" ", "%20")
@@ -146,21 +146,25 @@ Friend Module ModSecret
 #Region "更新"
 
     Friend Sub UpdateCheckByButton()
-        Hint("该版本中不包含更新功能……")
+        Hint("下载恢复版已停用自动更新，请手动替换程序。")
     End Sub
 
-    Friend IsUpdateWaitingRestart As Boolean = False
+    '恢复版不下载、排队安装或替换启动器更新。
+    Friend Const IsUpdateWaitingRestart As Boolean = False
     Public Sub UpdateRestart(TriggerRestartAndByEnd As Boolean)
     End Sub
     Public Sub UpdateReplace(ProcessId As Integer, OldFileName As String, NewFileName As String, TriggerRestart As Boolean)
     End Sub
 
     ''' <summary>
-    ''' 确保 PathTemp/Latest.exe 是最新正式版的 PCL，它会被用于整合包打包。
-    ''' 如果不是，则下载一个。
+    ''' 为整合包打包准备当前恢复版启动器的本地副本，不下载官方版本。
+    ''' 使用独立缓存文件名，避免复用官方版本的 Latest.exe。
     ''' </summary>
     Friend Sub DownloadLatestPCL(Optional LoaderToSyncProgress As LoaderBase = Nothing)
-        '注意：如果要自行实现这个功能，请换用另一个文件路径，以免与官方版本冲突
+        Dim LauncherPath As String = PathTemp & "RestoredLauncher.exe"
+        DirectoryUtils.Create(PathTemp)
+        If Not PathUtils.IsSame(PathExe, LauncherPath) Then FileUtils.Copy(PathExe, LauncherPath)
+        If LoaderToSyncProgress IsNot Nothing Then LoaderToSyncProgress.Progress = 1
     End Sub
 
 #End Region
@@ -168,12 +172,12 @@ Friend Module ModSecret
 #Region "联网配置"
 
     ''' <summary>
-    ''' 联网获取的配置信息。
-    ''' 若获取失败或仍在获取中，可能为 Nothing。
+    ''' 恢复版不读取远端配置，也不回放磁盘中的历史云控配置。
+    ''' 固定为空，保留字段以兼容依赖它的页面。
     ''' </summary>
-    Public ServerConfig As JObject
+    Public ReadOnly ServerConfig As JObject = Nothing
 
-    Public ServerLoader As New LoaderTask(Of Integer, Integer)("PCL 配置更新", Sub() Logger.Info("该版本中不包含更新通知功能……"), Priority:=ThreadPriority.BelowNormal) With
+    Public ServerLoader As New LoaderTask(Of Integer, Integer)("本地配置初始化", Sub() Logger.Info("下载恢复版已停用远端配置、历史配置回放和自动更新。"), Priority:=ThreadPriority.BelowNormal) With
         {.ReloadTimeout = 1000 * 60 * 60} '超时 1 小时
 
 #End Region
